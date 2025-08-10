@@ -1,0 +1,24 @@
+[application]
+
+name = "cadoku"
+
+# desktop, web, mobile, ssr
+default_platform = "web"
+
+# `build` & `serve` dist path
+out_dir = "docs"
+
+# resource (public) file folder
+asset_dir = "public"
+
+[web.app]
+
+title = "CADOKU"
+
+[web.watcher]
+
+# when watcher trigger, regenerate the `index.html`
+reload_html = true
+
+# which files or dirs will be watcher monitoring
+watch_path = ["src", "public"]
