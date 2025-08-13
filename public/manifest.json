@@ -1,11 +1,6 @@
 {
-  "name": "Dioxus",
+  "name": "Cadoku",
   "icons": [
-    {
-      "src": "logo_192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
     {
       "src": "logo_512.png",
       "type": "image/png",
@@ -24,10 +19,10 @@
   "display": "standalone",
   "display_override": ["window-control-overlay", "standalone"],
   "scope": "/",
-  "theme_color": "#000000",
-  "background_color": "#ffffff",
-  "short_name": "Dioxus",
-  "description": "Dioxus is a portable, performant, and ergonomic framework for building cross-platform user interfaces in Rust.",
+  "theme_color": "#3a1000",
+  "background_color": "#ffe4e4",
+  "short_name": "Cadoku",
+  "description": "Cadoku Sudokus",
   "dir": "ltr",
   "lang": "en",
   "orientation": "portrait"

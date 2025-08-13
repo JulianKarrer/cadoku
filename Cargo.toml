@@ -7,6 +7,9 @@ publish = false
 
 [dependencies]
 dioxus = { version = "0.6.3", features = ["web"] }
+dioxus-sdk = { version = "0.6", features = ["timing"] }
+getrandom = { version = "0.3.3", features = ["wasm_js"] }
+const_for = "0.1.5"
 
 [profile]
 
