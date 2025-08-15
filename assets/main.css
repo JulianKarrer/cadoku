@@ -2,7 +2,8 @@
     --bg: #ffe4e4;
     --drk: #3a1000;
     --lgt: #fffefe;
-    --hlt: #fffefe88;
+    --fcs: #fffefe88;
+    --hlt: #ffcccc;
 
     --w: min(80vmin, 50vh);
     --h1: calc(0.1 * var(--w));
@@ -25,7 +26,8 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    position: relative;
+    position: relative;  
+    flex-direction: column;
 }
 .btm{
     justify-content: center;
@@ -71,10 +73,10 @@ input:focus {
     background-color: var(--lgt);
 }
 
-.highlighted {
-    background-color: var(--hlt);
+.focused {
+    background-color: var(--fcs);
 }
-.strongly-highlighted{
+.strongly-focused{
     background-color: var(--lgt);
 }
 
@@ -155,3 +157,51 @@ img {
     width: calc(0.5 * var(--w));
 }
 
+/* EXIT */
+.exit-btn{
+    /* font */
+    color: var(--drk);
+    font-size: calc(0.5 * var(--sqrfnt));
+    text-align: center;
+    font-family: Mooli;
+    /* styling */
+    opacity: 0.3;
+    background: var(--bg);
+    border: 0px;
+    cursor: pointer;
+    /* layout/shape */
+    position: absolute;
+    top: calc(-0.1 * var(--w));
+    height: calc(0.1 * var(--w));
+    aspect-ratio: 2;
+}
+.exit-btn:hover{
+    opacity: 1;
+}
+
+/* MENU */
+
+.menu-button{
+    /* font */
+    color: var(--drk);
+    font-size: var(--sqrfnt);
+    text-align: center;
+    font-family: Mooli;
+    /* styling */
+    background: var(--bg);
+    border: 2px solid var(--drk);
+    border-radius: var(--sqrfnt);
+    cursor: pointer;
+    /* layout/shape */
+    width: calc(0.6 * var(--w));
+    aspect-ratio: 4;
+    margin: calc(0.2 * var(--sqrfnt));
+}
+
+.menu-btn-focused{
+    background: var(--hlt);
+}
+
+.play-unfocused{
+    opacity: 0.2;
+}

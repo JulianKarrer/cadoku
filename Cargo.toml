@@ -7,9 +7,13 @@ publish = false
 
 [dependencies]
 dioxus = { version = "0.6.3", features = ["web"] }
-dioxus-sdk = { version = "0.6", features = ["timing"] }
+dioxus-sdk = { version = "0.6", features = ["timing", "storage"] }
 getrandom = { version = "0.3.3", features = ["wasm_js"] }
 const_for = "0.1.5"
+strum = "0.27.2"
+strum_macros = "0.27.2"
+serde = { version = "1.0.219", features = ["derive"] }
+serde-big-array = "0.5.1"
 
 [profile]
 

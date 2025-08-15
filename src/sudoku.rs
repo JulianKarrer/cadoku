@@ -1,17 +1,53 @@
-use std::{array::IntoIter, fmt::Debug, ops::{Sub, SubAssign}, u8};
+use std::{fmt::Debug, ops::{Sub, SubAssign}, u8};
 
 
 use dioxus::logger::tracing::debug;
+use serde::{Deserialize, Serialize};
+use serde_big_array::BigArray;
 
 use crate::constants::{PEERS, UNITS};
 
-pub const EXAMPLE : Sudoku = Sudoku{grid : [0,0,3,0,2,0,6,0,0,9,0,0,3,0,5,0,0,1,0,0,1,8,0,6,4,0,0,0,0,8,1,0,2,9,0,0,7,0,0,0,0,0,0,0,8,0,0,6,7,0,8,2,0,0,0,0,2,6,0,9,5,0,0,8,0,0,2,0,3,0,0,9,0,0,5,0,1,0,3,0,0,]};
+
+pub fn generate_subtractive(hints:usize)->(Sudoku, [u8; 81]){
+    assert!(17 <= hints && hints <= 81, "Number of hints must be between 17 and 81");
+    // generate a random solution
+    let mut sudoku = Sudoku::generate_random_solution();
+    let solution = sudoku.grid.clone();
+    // generate a random order of squares to remove hints from
+    let mut order = get_random_square_permutation();
+    let mut i = 0;
+    loop{
+        // if the right number of hints is left, return
+        if sudoku.count_hints() <= hints  {return (sudoku, solution);}
+        // if there are no more squares to try, we are stuck:
+        // reshuffle and try again
+        if i >= 80{
+            order = get_random_square_permutation();
+            sudoku.grid = solution;
+            i = 0;
+        }
+        // remove the hint from a copy of the current sudoku 
+        // in case backtracking is required
+        let mut new = sudoku.clone();
+        new.grid[order[i]] = 0;
+        // square order[i] has now been tried, remove it
+        i += 1;
+        if let Some(sol) = constrain(&new){
+            debug_assert!(sol.grid == solution);
+            // if the solution is still unique and matches the 
+            // target solution, update the current sudoku
+            sudoku = new;
+        } 
+        // otherwise, the `new` sudoku will just be dropped
+        // and we try again in the next iteration
+    }
+}
 
 /// Generate a random sudoku with the given number of hints that can be solved
 /// purely by repeatedly propagating the trivial constraints in `constrain` with
 /// no additional search. This guarantees that a human does not have to guess at
 /// any point to obtain the solution.
-pub fn generate_trivial(hints:usize)->(Sudoku, [u8; 81]){
+pub fn generate_additive(hints:usize)->(Sudoku, [u8; 81]){
     assert!(17 <= hints && hints <= 81, "Number of hints must be between 17 and 81");
     let mut attempts = 0;
     loop {
@@ -50,6 +86,7 @@ pub fn generate_trivial(hints:usize)->(Sudoku, [u8; 81]){
                 // make sets and sudoku reflect the updated grid
                 sets.iter_mut().for_each(|t|t.2 = grid[t.0]);
         };
+        debug!("we go AAAAGAIN");
         attempts += 1;
         // check if result is solvable and if the number of hints is low enough
         if  sets.iter().all(|(_, _, s)|s.is_single()) && 
@@ -60,7 +97,7 @@ pub fn generate_trivial(hints:usize)->(Sudoku, [u8; 81]){
                 solution[i] = s.single_to_number().unwrap();
             }
             debug_assert!(res.grid.iter().enumerate().all(|(i, num)| if *num > 0 {*num == solution[i]} else {true}));
-            debug_assert!(constrain(res.clone()).unwrap().grid == solution);
+            debug_assert!(constrain(&res).unwrap().grid == solution);
             debug!("{} attempts until desired hint count was reached", attempts);
             return (res, solution)
         }
@@ -68,7 +105,7 @@ pub fn generate_trivial(hints:usize)->(Sudoku, [u8; 81]){
 }
 
 /// Attempt to propagate any constraints formed by the hints in the sudoku by
-pub fn constrain(sudoku: Sudoku)->Option<Sudoku>{
+pub fn constrain(sudoku: &Sudoku)->Option<Sudoku>{
     let mut grid = [Set::full(); 81];
     // assign all hints
     for (s, hint) in sudoku.grid.iter().enumerate(){
@@ -141,19 +178,20 @@ fn eliminate(grid: &mut[Set; 81], s:usize, d:Set)->bool{
 
 /// A sudoku, stored as a flat, row-major array of 81 bytes,
 /// where each `u8` is a value 1-9 or zero for the empty field.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Sudoku {
+    #[serde(with = "BigArray")]
     grid : [u8; 81]
 }
 impl Sudoku{
-    fn empty()->Self{
+    pub fn empty()->Self{
         Sudoku { grid: [0; 81] }
     }
     pub fn set(&mut self, square:usize, val:u8){
         debug_assert!(square < 81);
         self.grid[square] = val
     }
-    fn solved(&self)->bool{
+    pub fn filled(&self)->bool{
         for v in self.grid{
             if v == 0{
                 return false
@@ -165,7 +203,7 @@ impl Sudoku{
         debug_assert!(x<9 && y<9);
         self.grid[x+y*9] == 0
     }
-    pub fn count_completed_units(&self)->usize{
+    pub fn count_filled_units(&self)->usize{
         let mut count = 0;
         for ss in UNITS{
             for s in ss{
@@ -175,6 +213,27 @@ impl Sudoku{
             }
         }
         count
+    }
+    fn count_hints(&self)->usize{
+        self.grid.iter().filter(|n| **n > 0).count()
+    }
+    fn generate_random_solution()->Self{
+        let mut grid = [Set::full(); 81];
+
+        while !grid.iter().all(|s|s.is_single()) {
+            let square = get_random_usize(80);
+            let rand_feasible_digit = grid[square].select_random();
+            if !assign(&mut grid, square, rand_feasible_digit){
+                grid = [Set::full(); 81];
+            };
+        }
+
+        let mut res = Sudoku::empty();
+        for (square, set) in grid.iter().enumerate(){
+            res.grid[square] = set.single_to_number().unwrap();
+        }
+       
+        res
     }
 }
 
@@ -265,4 +324,18 @@ fn get_random_usize(upper_lim_exclusive:usize)->usize{
     let mut buf = [0u8; (usize::BITS/8u32) as usize];
     getrandom::fill(&mut buf).unwrap();
     usize::from_le_bytes(buf) % upper_lim_exclusive
+}
+fn get_random_square_permutation()->[usize;81]{
+    // fill a buffer with random bytes
+    let mut rands = [0u8; 81];
+    getrandom::fill(&mut rands).unwrap();
+    // create an array holding the sequence of numbers 0 to 80
+    let mut res = [0; 81];
+    for i in 0..81{
+        res[i]=i
+    }
+    // sort the sequence with respect to the random bytes,
+    // creating a random permutation
+    res.sort_unstable_by(|a,b|rands[*a].cmp(&rands[*b]));
+    res
 }
