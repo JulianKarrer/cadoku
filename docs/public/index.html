@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>CADOKU</title>
+    <link rel="preload" href="assets/main.css" as="style"/>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/./assets/sw.js");
+      }
+    </script>
+    <style>
+      :root {
+        --bg: #ffe4e4;
+        --drk: #3a1000;
+      }
+      html {
+        background: var(--bg);
+        color: var(--drk);
+        font-family: Mooli;
+        margin: 0;
+        padding: 0;
+      }
+      body{
+        /* start with zero opacity to prevent unstyled content flashing on load  */
+        opacity: 0;
+      }
+    </style>
+    <link rel="manifest" href="/assets/manifest.json" />
+    <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8" />
+  <link rel="preload" as="style" href="/./assets/main-28907604376fee98.css" crossorigin><link rel="preload" as="image" href="/./assets/mascot-ea1fad3535b86371.avif" crossorigin><link rel="preload" as="script" href="/./assets/cadoku-d88716d93bd8c340.js" crossorigin><link rel="preload" as="fetch" type="application/wasm" href="/./assets/cadoku_bg-28970a51f0e3d563.wasm" crossorigin></head>
+  <body>
+    <div id="main"></div>
+  <script>
+            // We can't use a module script here because we need to start the script immediately when streaming
+            import("/./assets/cadoku-d88716d93bd8c340.js").then(
+                ({ default: init }) => {
+                init("/./assets/cadoku_bg-28970a51f0e3d563.wasm").then((wasm) => {
+                    if (wasm.__wbindgen_start == undefined) {
+                    wasm.main();
+                    }
+                });
+                }
+            );
+            </script>
+            
+            </body>
+</html>

@@ -1,6 +1,10 @@
 [application]
-
 name = "cadoku"
+
+[bundle]
+identifier = "de.juliankarrer"
+publisher = "Julian Karrer"
+icon = ["assets/icon.png"]
 
 # desktop, web, mobile, ssr
 default_platform = "web"
@@ -20,4 +24,4 @@ title = "CADOKU"
 reload_html = true
 
 # which files or dirs will be watcher monitoring
-watch_path = ["src", "public"]
+watch_path = ["src", "public", "assets"]

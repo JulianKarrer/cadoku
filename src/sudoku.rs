@@ -4,7 +4,6 @@ use std::{
     u8,
 };
 
-use dioxus::logger::tracing::debug;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
@@ -59,7 +58,6 @@ pub fn _generate_additive(hints: usize) -> (Sudoku, [u8; 81]) {
         17 <= hints && hints <= 81,
         "Number of hints must be between 17 and 81"
     );
-    let mut attempts = 0;
     loop {
         let mut sets: Vec<(usize, u8, Set)> = (0..81usize)
             .map(|i| (i, _get_random_u8(u8::MAX), Set::full()))
@@ -95,7 +93,6 @@ pub fn _generate_additive(hints: usize) -> (Sudoku, [u8; 81]) {
             // make sets and sudoku reflect the updated grid
             sets.iter_mut().for_each(|t| t.2 = grid[t.0]);
         }
-        attempts += 1;
         // check if result is solvable and if the number of hints is low enough
         if sets.iter().all(|(_, _, s)| s.is_single())
             && res.grid.iter().filter(|n| (**n) != 0u8).count() == hints
@@ -110,7 +107,6 @@ pub fn _generate_additive(hints: usize) -> (Sudoku, [u8; 81]) {
                 true
             }));
             debug_assert!(constrain(&res).unwrap().grid == solution);
-            // debug!("{} attempts until desired hint count was reached", attempts);
             return (res, solution);
         }
     }
