@@ -1,5 +1,5 @@
 [application]
-name = "cadoku"
+name = "Cadoku"
 
 [bundle]
 identifier = "de.juliankarrer"
@@ -16,7 +16,7 @@ out_dir = "docs"
 asset_dir = "public"
 
 [web.app]
-title = "CADOKU"
+title = "Cadoku"
 
 [web.watcher]
 
