@@ -17,6 +17,7 @@ asset_dir = "public"
 
 [web.app]
 title = "Cadoku"
+base_path = "cadoku"
 
 [web.watcher]
 
