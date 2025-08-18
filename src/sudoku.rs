@@ -47,12 +47,12 @@ pub fn generate_subtractive(hints:usize)->(Sudoku, [u8; 81]){
 /// purely by repeatedly propagating the trivial constraints in `constrain` with
 /// no additional search. This guarantees that a human does not have to guess at
 /// any point to obtain the solution.
-pub fn generate_additive(hints:usize)->(Sudoku, [u8; 81]){
+pub fn _generate_additive(hints:usize)->(Sudoku, [u8; 81]){
     assert!(17 <= hints && hints <= 81, "Number of hints must be between 17 and 81");
     let mut attempts = 0;
     loop {
         let mut sets : Vec<(usize, u8, Set)> = (0..81usize)
-        .map(|i| (i, get_random_u8(u8::MAX), Set::full())).collect();
+        .map(|i| (i, _get_random_u8(u8::MAX), Set::full())).collect();
         let mut grid = [Set::full(); 81];
         let mut res = Sudoku::empty();
         while 
@@ -315,7 +315,7 @@ impl Sub for Set{
     }
 }
 
-fn get_random_u8(upper_lim_exclusive:u8)->u8{
+fn _get_random_u8(upper_lim_exclusive:u8)->u8{
     let mut buf = [0u8;1];
     getrandom::fill(&mut buf).unwrap();
     buf[0] % upper_lim_exclusive

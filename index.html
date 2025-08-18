@@ -8,6 +8,23 @@
         navigator.serviceWorker.register("/{base_path}/assets/sw.js");
       }
     </script>
+    <style>
+      :root {
+        --bg: #ffe4e4;
+        --drk: #3a1000;
+      }
+      html {
+        background: var(--bg);
+        color: var(--drk);
+        font-family: Mooli;
+        margin: 0;
+        padding: 0;
+      }
+      body{
+        /* start with zero opacity to prevent unstyled content flashing on load  */
+        opacity: 0;
+      }
+    </style>
     <link rel="manifest" href="/assets/manifest.json" />
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

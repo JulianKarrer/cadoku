@@ -13,7 +13,28 @@ var version = 'v1.0.0::';
 */
 var offlineFundamentals = [
   // add here the files you want to cache
-  'favicon.ico'
+  'favicon.ico',
+  'assets/fonts/Mooli.ttf',
+  // cat assets
+  'assets/images/cat/mascot.png',
+  'assets/images/cat/hearts.png',
+  'assets/images/cat/happy.png',
+  'assets/images/cat/sparkle.png',
+  'assets/images/cat/easy.png',
+  'assets/images/cat/medium.png',
+  'assets/images/cat/hard.png',
+  'assets/images/cat/challenge.png',
+  'assets/images/cat/firework.png',
+  'assets/images/fireworks/0.png',
+  'assets/images/fireworks/1.png',
+  'assets/images/fireworks/2.png',
+  'assets/images/fireworks/3.png',
+  'assets/images/fireworks/4.png',
+  'assets/images/fireworks/5.png',
+  'assets/images/fireworks/6.png',
+  'assets/images/fireworks/7.png',
+  'assets/images/fireworks/8.png',
+  'assets/images/fireworks/9.png',
 ];
 
 /* The install event fires when the service worker is first installed.

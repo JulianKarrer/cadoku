@@ -3,24 +3,15 @@ use std::time::Duration;
 
 use dioxus::{logger::tracing::debug, prelude::*};
 use dioxus_sdk::{storage::use_persistent, utils::timing::{use_debounce, use_interval}};
-use crate::sudoku::{generate_subtractive, Sudoku};
+use crate::{cat::{Cat, CatSprite, CatState, CAT_EXPRESSION_DURATION, CAT_FIREWORK_DURATION, CAT_FIREWORK_FRAMECOUNT}, sudoku::{generate_subtractive, Sudoku}};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 mod constants;
 mod sudoku;
+mod cat;
 
 
 // SETTINGS
-
-/// Size of the cat in pixels
-const CAT_ASSET_PX: u32 = 300;
-/// Distance in pixels required for sufficiently petting the cat
-/// to get a reaction.
-const CAT_PET_DIST:f64 = 500.;
-/// Duration of the change in expression of the cat in milliseconds
-const CAT_EXPRESSION_DURATION:u64 = 1500; 
-/// Duration of each frame of the firework animation when winning in milliseconds
-const CAT_FIREWORK_DURATION:u64 = 100; 
 
 /// Number of hints for each difficulty
 impl Difficulty{
@@ -34,40 +25,11 @@ impl Difficulty{
     }
 }
 
-
 // ASSETS
 
-static CSS: Asset = asset!("assets/main.css");
-const CAT_OPTIONS: ImageAssetOptions = ImageAssetOptions::new()
-    .with_size(ImageSize::Manual { width: CAT_ASSET_PX, height: CAT_ASSET_PX })
-    .with_format(ImageFormat::Avif);
-const FIREWORK_OPTIONS: ImageAssetOptions = ImageAssetOptions::new()
-    .with_size(ImageSize::Manual { width: CAT_ASSET_PX, height: 2*CAT_ASSET_PX })
-    .with_format(ImageFormat::Avif);
-const CAT_NORMAL: Asset = asset!( "assets/images/cat/mascot.png", CAT_OPTIONS.with_preload(true) );
-const CAT_HEARTS:Asset = asset!( "assets/images/cat/hearts.png", CAT_OPTIONS );
-const CAT_HAPPY: Asset = asset!( "assets/images/cat/happy.png", CAT_OPTIONS );
-const CAT_VERY_HAPPY: Asset = asset!( "assets/images/cat/sparkle.png", CAT_OPTIONS );
-const CAT_EASY: Asset = asset!( "assets/images/cat/easy.png", CAT_OPTIONS );
-const CAT_MEDIUM: Asset = asset!( "assets/images/cat/medium.png", CAT_OPTIONS );
-const CAT_HARD: Asset = asset!( "assets/images/cat/hard.png", CAT_OPTIONS );
-const CAT_CHALLENGE: Asset = asset!( "assets/images/cat/challenge.png", CAT_OPTIONS );
-const CAT_FIREWORK: Asset = asset!( "assets/images/cat/firework.png", CAT_OPTIONS );
-const FIREWORK: [Asset; 10] = [
-    asset!("assets/images/fireworks/0.png", FIREWORK_OPTIONS),
-    asset!("assets/images/fireworks/1.png", FIREWORK_OPTIONS),
-    asset!("assets/images/fireworks/2.png", FIREWORK_OPTIONS),
-    asset!("assets/images/fireworks/3.png", FIREWORK_OPTIONS),
-    asset!("assets/images/fireworks/4.png", FIREWORK_OPTIONS),
-    asset!("assets/images/fireworks/5.png", FIREWORK_OPTIONS),
-    asset!("assets/images/fireworks/6.png", FIREWORK_OPTIONS),
-    asset!("assets/images/fireworks/7.png", FIREWORK_OPTIONS),
-    asset!("assets/images/fireworks/8.png", FIREWORK_OPTIONS),
-    asset!("assets/images/fireworks/9.png", FIREWORK_OPTIONS),
-];
+static CSS: Asset = asset!("assets/main.css", CssAssetOptions::new().with_preload(true));
 
 // FUNCITONALITY
-
 
 fn main() {
     dioxus::launch(app);
@@ -75,21 +37,35 @@ fn main() {
 
 
 fn app() -> Element {
-    // generate sudoku
+    // containers and signal definitions
     let (sudoku, solution) = (Sudoku::empty(), [0u8;81]);
+    // use persistent storage for sudoku and solution, such that reloads don't revert progress
     let mut sudoku  = use_persistent("sudoku",move || sudoku);
     let mut solution  = use_persistent("solution",move || solution.to_vec());
-    let mut focused = use_signal(move || false);
+    // whether the sudoku grid is currently focused, which is unset if any other area is clicked
+    let mut focused = use_signal(move || true);
+    // whether a game is currently played or nor. Toggles the menu and game screens respectively
     let mut playing = use_persistent("playing",move || false);
     use_context_provider(|| Signal::new(CatState::default()));
+    // current state (i.e. sprite) of the cat
     let mut cat_state = use_context::<Signal<CatState>>();
+    // currently selected game difficulty in the menu
     let mut difficulty = use_signal(move || None);
+    // singal saving the key code of the last pressed key and triggering input handlers
+    // via `use_effect` hooks
+    let mut key_pressed = use_signal(move || None);
 
     // define behaviour when quit button is pressed
     let on_quit = Callback::new(move |_| {
         *playing.write() = false;
         *difficulty.write() = None;
         *cat_state.write() = CatState::default();
+    });
+    // reset if already won on load (if persistent data is solution)
+    use_effect(move || {
+        if sudoku.peek().filled(){
+            on_quit(());
+        }
     });
 
     rsx! (
@@ -101,6 +77,8 @@ fn app() -> Element {
         },
         // start of RSX content
         div { class: "container",
+            onclick: move |_| { focused.set(false) ; debug!("unfocused")},
+            onkeydown: move |e| {*key_pressed.write() = Some(e.code()); debug!("{:?}",e.code())},
             // header: title
             div{
                 class: "cntr",
@@ -108,10 +86,12 @@ fn app() -> Element {
             },
             if *playing.read(){
                 // main game
-                div { 
-                    onfocusin: move |_| {*focused.write() = true},
-                    onfocusout: move |_| {*focused.write() = false},
-                    Sudoku { sudoku, solution, focused, on_quit, },
+                div { class: "btm",
+                    onclick: move |e| {if !*focused.peek(){
+                        focused.set(true);
+                    }; e.stop_propagation(); debug!("focused")},
+                    // onfocusout: move |_| {*focused.write() = false},
+                    Sudoku { sudoku, solution, focused, on_quit, key_pressed },
                 },
             } else{
                 // menu
@@ -145,9 +125,7 @@ fn app() -> Element {
                 }
             }
             // footer: cat
-            div{
-                Cat { }
-            },
+            Cat { }
         }
     )
 }
@@ -158,6 +136,7 @@ struct SudokuProps {
     sudoku: Signal<Sudoku>,
     solution: Signal<Vec<u8>>,
     focused: Signal<bool>,
+    key_pressed: Signal<Option<Code>>,
     on_quit: EventHandler<()>,
 }
 
@@ -166,9 +145,14 @@ fn Sudoku(props:SudokuProps) -> Element {
     let mut cat_state = use_context::<Signal<CatState>>();
     let mut cat_reset = use_debounce(
         Duration::from_millis(CAT_EXPRESSION_DURATION), 
-        move |_| cat_state.write().state = State::default()
+        move |_| cat_state.write().state = CatSprite::default()
     );
-    let mut focus = use_signal(move || None);
+    let mut cursor = use_signal(move || None);
+    
+    // handle focus
+    use_effect(move || {if !*props.focused.read(){
+        *cursor.write() = None;
+    }});
 
     // handle the entry of value `val` at coordinates `x`,`y`, including 
     // - checking against the solution
@@ -177,19 +161,21 @@ fn Sudoku(props:SudokuProps) -> Element {
     let mut check_entry = move |x,y,val|{
         let i = x + 9*y;
         // if the input is accordance with the solution, set the square
-        if board.read().is_zero(x,y) && val == props.solution.read()[i]{
-            let units_correct = board.read().count_filled_units();
-            board.write().set(i, val);
-            // reset focus
-            use_effect(move ||{*focus.write() = None;});
+        if board.peek().is_zero(x,y) && val == props.solution.read()[i]{
+            let units_correct = board.peek().count_filled_units();
+            let mut updated = board.peek().clone();
+            updated.set(i, val);
+            board.set(updated);
+            // // reset focus
+            // use_effect(move ||{*cursor.write() = None;});
             // check win condition
-            if board.read().filled(){
+            if board.peek().filled(){
                 // game has been won!
-                cat_state.write().state = State::Fireworks(0);
+                cat_state.write().state = CatSprite::Fireworks(0);
                 let _cat_firework_animation = use_interval(Duration::from_millis(CAT_FIREWORK_DURATION), move || {
                     let state = cat_state.read().state;
-                    if let State::Fireworks(i) = state {
-                        cat_state.write().state = State::Fireworks((i+1)%FIREWORK.len());
+                    if let CatSprite::Fireworks(i) = state {
+                        cat_state.write().state = CatSprite::Fireworks((i+1)%CAT_FIREWORK_FRAMECOUNT);
                     }
                 });
                 // if the animation should be interrupted at any point, insert a .cancel()
@@ -197,78 +183,60 @@ fn Sudoku(props:SudokuProps) -> Element {
                 return;
             }
             // on successful entry, trigger a sprite change of the cat
-            let one_more_unit_done = board.read().count_filled_units() > units_correct;
+            let one_more_unit_done = board.peek().count_filled_units() > units_correct;
             cat_state.write().state = if one_more_unit_done {
                 // a new unit was completed
                 // => cat is extra happy
-                State::VeryHappy
+                CatSprite::VeryHappy
             } else {
                 // some square was completed
                 // => cat is moderately happy
-                State::Happy
+                CatSprite::Happy
             };
             // return the cat to its normal state after a set duration
             cat_reset.action(());
         };
     };
-    let mut keyboard_check = move|e_code: Code, x:usize, y:usize|{
-        // input by keystroke
-        let val = match e_code {
-            Code::Digit1 | Code::Numpad1 => 1u8,
-            Code::Digit2 | Code::Numpad2 => 2u8,
-            Code::Digit3 | Code::Numpad3 => 3u8,
-            Code::Digit4 | Code::Numpad4 => 4u8,
-            Code::Digit5 | Code::Numpad5 => 5u8,
-            Code::Digit6 | Code::Numpad6 => 6u8,
-            Code::Digit7 | Code::Numpad7 => 7u8,
-            Code::Digit8 | Code::Numpad8 => 8u8,
-            Code::Digit9 | Code::Numpad9 => 9u8,
-            _ => {0u8}
-        };
-        check_entry(x, y, val);
-    };
-    let mut elements : Signal<[Option<std::rc::Rc<MountedData>>; 81]> = use_signal(|| [const { None }; 81]);
+    
+    // handle keyboard inputs
+    use_effect(move ||{
+        // keypress should be the ONLY dependency here, use `peek` to prevent 
+        // subscriptions to anything but the `key_pressed` prop, which should
+        // trigger re-runs of this closure
+        let keypress = *props.key_pressed.read(); 
+        if *props.focused.peek(){
+            let cursor_cur = *cursor.peek();
+            if let Some((x,y)) = cursor_cur{
+                if let Some(code) = keypress {
+                    match code{
+                        // check for numbers entered
+                        Code::Digit1 | Code::Numpad1 => {check_entry(x, y, 1u8)},
+                        Code::Digit2 | Code::Numpad2 => {check_entry(x, y, 2u8)},
+                        Code::Digit3 | Code::Numpad3 => {check_entry(x, y, 3u8)},
+                        Code::Digit4 | Code::Numpad4 => {check_entry(x, y, 4u8)},
+                        Code::Digit5 | Code::Numpad5 => {check_entry(x, y, 5u8)},
+                        Code::Digit6 | Code::Numpad6 => {check_entry(x, y, 6u8)},
+                        Code::Digit7 | Code::Numpad7 => {check_entry(x, y, 7u8)},
+                        Code::Digit8 | Code::Numpad8 => {check_entry(x, y, 8u8)},
+                        Code::Digit9 | Code::Numpad9 => {check_entry(x, y, 9u8)}, 
+                        // check for cursor movement
+                        Code::ArrowDown  => {cursor.set(Some((x, (y+1)%9)))},
+                        Code::ArrowLeft  => {cursor.set(Some(((x+8)%9, y)))},
+                        Code::ArrowRight => {cursor.set(Some(((x+1)%9, y)))},
+                        Code::ArrowUp    => {cursor.set(Some((x, (y+8)%9)))},
+                        _ => {}
+                    };
+                }
+            }
+
+        }
+    });
 
     rsx! (
         div { class: "btm",
-        onkeydown: move |e| async move {
-            // move focus using arrow keys
-            if *props.focused.read(){
-                let mut updated = None;
-                if let Some((x,y)) = *focus.read() {
-                    debug!("{:?}", e.code());
-                    match e.code() {
-                        // add 8 to subtract 1 in mod 9
-                        Code::ArrowDown  => {updated = Some((x, (y+1)%9))},
-                        Code::ArrowLeft  => {updated = Some(((x+8)%9, y))},
-                        Code::ArrowRight => {updated = Some(((x+1)%9, y))},
-                        Code::ArrowUp    => {updated = Some((x, (y+8)%9))},
-                        _ => {},
-                    };
-                }
-                if let Some(_) = updated{
-                    // loose focus
-                    if let Some((x,y)) = *focus.read(){
-                        for elem in elements.read().iter(){
-                            if let Some(elem) = elem.as_ref() {
-                                elem.set_focus(false).await.unwrap();
-                            }
-                        }
-                        debug!("{:?} {} {} ",elements, x,y);
-                    }
-                   
-                    *focus.write() = updated;
-                }
-                if let Some((x,y)) = *focus.read() {
-                    keyboard_check(e.code(),x,y);
-                }
-            } 
-        },
         button { 
             class: "exit-btn",
-            onclick: move |_| {
-                props.on_quit.call(());
-            },
+            onclick: move |_| { props.on_quit.call(());},
             "Quit" 
         },
         div { class: "grid",
@@ -283,8 +251,11 @@ fn Sudoku(props:SudokuProps) -> Element {
                             if board.read().is_zero(3*gx+x,3*gy+y){
                                 // if the square is empty, show an input field
                                 input { 
-                                    onmounted: move |el| (*elements.write())[3*gx+x+9*(3*gy+y)] = Some(el.data()),
-                                    class: if let Some((x_f, y_f)) = *focus.read() {
+                                    // whether the square is unfocused
+                                    // lightly highlighted (in same row or column as cursor)
+                                    // or strongly highlighted (at the cursor)
+                                    // is managed via CSS classes
+                                    class: if let Some((x_f, y_f)) = *cursor.read() {
                                         if *props.focused.read() && ((3*gx+x) == x_f && (3*gy+y) == y_f) {
                                             "emptysquare strongly-focused"
                                         } else if *props.focused.read() && ((3*gx+x) == x_f || (3*gy+y) == y_f) {
@@ -295,23 +266,25 @@ fn Sudoku(props:SudokuProps) -> Element {
                                     } else {
                                         "emptysquare"
                                     },
-                                    onkeydown: move |e| {
-                                        keyboard_check(e.code(), 3*gx+x, 3*gy+y);
-                                        e.prevent_default();
-                                    },
-                                    // note which square is currently focused
-                                    onfocusin: move |_|{ *focus.write() = Some((3*gx+x,3*gy+y));},
+                                    // prevent default HTML input event, since keystrokes
+                                    // are already captured in a parent div and handled by a 
+                                    // use_effect hook on the `key_pressed` prop
+                                    onkeydown: move |e| {e.prevent_default();},
+                                    // focus the targeted square on click
+                                    onfocusin: move |_|{ cursor.set(Some((3*gx+x,3*gy+y)));},
                                 }
                             } else {
                                 // if the square is not empty, show the number in it
                                 span { 
-                                    class: if let Some((x_f, y_f)) = *focus.read(){
+                                    class: if let Some((x_f, y_f)) = *cursor.read(){
                                         if *props.focused.read() && ((3*gx+x) == x_f || (3*gy+y) == y_f) {
                                         "square focused"
                                         } else {"square"} 
                                     } else {"square"},
                                     "{props.solution.read()[3*gx+x + 9*(3*gy+y)]}" },
                             },
+                            // for debugging  show the solution in the dom,
+                            // but don't render it visibly
                             span { 
                                 class: "secret-hacker-hint", 
                                 "{props.solution.read()[3*gx+x + 9*(3*gy+y)]}",
@@ -323,15 +296,16 @@ fn Sudoku(props:SudokuProps) -> Element {
             }
             }
         },
-        // alternative input: buttons that enter at the currently focused cell
+        // alternative input: buttons that enter at the currently focused cell, if applicable
+        // this enables playing with mouse or on a touch device
         div { 
             class: "button-container",
             for val in 1..=9{
                 button { 
                     class: "num-button", 
                     onclick: move |_| {
-                        if *props.focused.read(){
-                            if let Some((x, y)) = *focus.read(){
+                        if *props.focused.peek(){
+                            if let Some((x, y)) = *cursor.peek(){
                                 check_entry(x, y, val);
                             }
                         }
@@ -344,84 +318,11 @@ fn Sudoku(props:SudokuProps) -> Element {
     )
 }
 
-/// The most crucial component of this application: 
-/// a cute cat that can be pet by clicking and dragging
-/// and which is displays a happy reaction when the sudoku is filled out.
-fn Cat() -> Element {
-    let cat_state = use_context::<Signal<CatState>>();
-    let mut coords: Signal<Option<(f64, f64)>> = use_signal(move || None);
-    let mut dist: Signal<f64> = use_signal(move || 0.);
-    // choose an asset for the cat depending on the state in the context
-    let cat_asset = move ||{
-        match cat_state.read().state{
-            State::Normal => CAT_NORMAL,
-            State::Happy => CAT_HAPPY,
-            State::VeryHappy => CAT_VERY_HAPPY,
-            State::EasyReaction => CAT_EASY,
-            State::MediumReaction => CAT_MEDIUM,
-            State::HardReaction => CAT_HARD,
-            State::ChallengeReaction => CAT_CHALLENGE,
-            State::Fireworks(_) => CAT_FIREWORK,
-        }
-    };
-    
-    rsx!(
-        div {  
-            if let State::Fireworks(i) = cat_state.read().state{
-                img { 
-                    class: "cat", 
-                    style: "z-index:2;", 
-                    src:  FIREWORK[i] 
-                }
-            }
-            img { 
-                class:"cat", 
-                // if the cat was sufficiently pet, display love for given duration
-                src: if *dist.read() > CAT_PET_DIST {CAT_HEARTS} else {cat_asset()}, 
-                draggable: false,
-                onpointerleave: move |_|{ *coords.write() = None; *dist.write() = 0.; },
-                onpointerup: move |_|{ *coords.write() = None },
-                onpointerdown: move |e|{ 
-                    *coords.write() = Some((e.element_coordinates().x, e.element_coordinates().y)) 
-                },
-                onpointermove: move|e|{
-                    // track the movement of the pointer while clicked to accumulate distance
-                    let mut update = false;
-                    if let Some((px, py)) = *coords.read() {
-                        update = true;
-                        let dx = e.element_coordinates().x - px;
-                        let dy = e.element_coordinates().y - py;
-                        dist += (dx*dx+dy*dy).sqrt();
-                    }
-                    if update{
-                        *coords.write() = Some((e.element_coordinates().x, e.element_coordinates().y));
-                    }
-                }
-            }
-        }
-    )
-}
-
 
 // State Definitions
 
-#[derive(Default, Clone, Copy, PartialEq)]
-enum State{
-    #[default]
-    Normal,
-    Happy,
-    VeryHappy,
-    EasyReaction,
-    MediumReaction,
-    HardReaction,
-    ChallengeReaction,
-    Fireworks(usize),
-}
-#[derive(Clone, Copy, Default)]
-struct CatState{
-    state: State
-}
 #[derive(Default, EnumIter, Display, Copy, Clone, PartialEq)]
+/// GAme difficulty, which translates to the number of cues given initially
 enum Difficulty{
     #[default]
     Easy,
@@ -430,13 +331,14 @@ enum Difficulty{
     Challenge,
 }
 impl Difficulty{
-    /// Get the `CatState` that illustrates the reaction to the given difficulty level.
+    /// Get the `CatState` that illustrates the reaction to 
+    /// the given difficulty level in the menu screen
     fn cat_state(&self)->CatState{
         match self{
-            Difficulty::Easy => CatState { state: State::EasyReaction },
-            Difficulty::Medium => CatState { state: State::MediumReaction },
-            Difficulty::Hard => CatState { state: State::HardReaction },
-            Difficulty::Challenge => CatState { state: State::ChallengeReaction },
+            Difficulty::Easy => CatState { state: CatSprite::EasyReaction },
+            Difficulty::Medium => CatState { state: CatSprite::MediumReaction },
+            Difficulty::Hard => CatState { state: CatSprite::HardReaction },
+            Difficulty::Challenge => CatState { state: CatSprite::ChallengeReaction },
         }
     }
 }

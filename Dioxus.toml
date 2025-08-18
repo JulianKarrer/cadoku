@@ -12,7 +12,6 @@ out_dir = "docs"
 asset_dir = "public"
 
 [web.app]
-
 title = "CADOKU"
 
 [web.watcher]

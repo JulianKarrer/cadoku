@@ -22,7 +22,7 @@
   "theme_color": "#3a1000",
   "background_color": "#ffe4e4",
   "short_name": "Cadoku",
-  "description": "Cadoku Sudokus",
+  "description": "cozy sudokus and a cute cat",
   "dir": "ltr",
   "lang": "en",
   "orientation": "portrait"

@@ -21,6 +21,8 @@ body {
     font-family: Mooli;
     margin: 0;
     padding: 0;
+    /* for transition on load */
+    opacity: 1;
 }
 .cntr {
     display: flex;
@@ -34,6 +36,10 @@ body {
     align-items: end;
     display: flex;  
     position: relative;
+    width: fit-content;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
 }
 h1 {
     font-size: var(--h1);
@@ -69,9 +75,13 @@ h1 {
     font-family: Mooli;
 }
 
-input:focus {
-    background-color: var(--lgt);
+input {
+    caret-color: transparent;
 }
+
+/* input:focus {
+    background-color: var(--lgt);
+} */
 
 .focused {
     background-color: var(--fcs);
@@ -115,6 +125,8 @@ input:focus {
     display: grid;
     grid-template-rows: 1fr 2fr 2fr;
     height: 100vh;
+    position: relative;
+    z-index: 0;
 }
 
 .num-button{
@@ -126,10 +138,10 @@ input:focus {
     /* layout */
     width:  calc(1.5 * var(--sqrfnt));
     aspect-ratio: 1;
-    margin: calc(0.1 * var(--sqrfnt));
+    margin: calc(0.07*var(--sqrfnt));
     margin-top: 10px;
     position: relative;
-    z-index: 2;
+    z-index: 3;
     /* style */
     border: var(--lthin) var(--lgt) solid;
     border-radius: calc(1 * var(--lthick));
