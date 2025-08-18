@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Julian Karrer"]
 edition = "2021"
 publish = false
+license = "MIT"
+keywords = ["game", "sudoku"]
 
 [dependencies]
 dioxus = { version = "0.6.3", features = ["web"] }
