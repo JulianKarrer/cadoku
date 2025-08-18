@@ -10,16 +10,42 @@
     {
       "src": "logo_512.png",
       "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "logo_512.png",
+      "type": "image/png",
       "sizes": "any",
       "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "sceenshots/home.png",
+      "type": "image/png",
+      "sizes": "1500x2664"
+    },
+    {
+      "src": "sceenshots/hearts.png",
+      "type": "image/png",
+      "sizes": "1500x2664"
+    },
+    {
+      "src": "sceenshots/fireworks.png",
+      "type": "image/png",
+      "sizes": "1500x2664"
     }
   ],
   "start_url": "/",
   "id": "/",
   "display": "standalone",
-  "display_override": ["window-control-overlay", "standalone"],
+  "display_override": [
+    "window-control-overlay",
+    "standalone"
+  ],
   "scope": "/",
-  "theme_color": "#3a1000",
+  "theme_color": "#ffe4e4",
   "background_color": "#ffe4e4",
   "short_name": "Cadoku",
   "description": "cozy sudokus and a cute cat",
