@@ -1,0 +1,29 @@
+{
+  "name": "Cadoku",
+  "icons": [
+    {
+      "src": "logo_512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "logo_512.png",
+      "type": "image/png",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ],
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "display_override": ["window-control-overlay", "standalone"],
+  "scope": "/",
+  "theme_color": "#3a1000",
+  "background_color": "#ffe4e4",
+  "short_name": "Cadoku",
+  "description": "cozy sudokus and a cute cat",
+  "dir": "ltr",
+  "lang": "en",
+  "orientation": "portrait"
+}

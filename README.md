@@ -9,7 +9,7 @@ A cozy, cat-themed and marshmallow-coloured Sudoku app.
 
 
 The application is written in Rust using Dioxus and is available cross-platform:
-- as a Progressive Web App 
+- as a [Progressive Web App](https://juliankarrer.github.io/cadoku/)
 - as an Android App
 - or Desktop application
 
