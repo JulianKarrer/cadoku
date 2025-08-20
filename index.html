@@ -1,36 +1,40 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>{app_title}</title>
-    <link rel="preload" href="assets/main.css" as="style"/>
-    <script>
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("/{base_path}/assets/sw.js");
-      }
-    </script>
-    <style>
-      :root {
-        --bg: #ffe4e4;
-        --drk: #3a1000;
-      }
-      html {
-        background: var(--bg);
-        color: var(--drk);
-        font-family: Mooli;
-        margin: 0;
-        padding: 0;
-      }
-      body{
-        /* start with zero opacity to prevent unstyled content flashing on load  */
-        opacity: 0;
-      }
-    </style>
-    <link rel="manifest" href="/assets/manifest.json" />
-    <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta charset="UTF-8" />
-  </head>
-  <body>
-    <div id="main"></div>
-  </body>
+
+<head>
+  <title>{app_title}</title>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/{base_path}/sw.js");
+    }
+  </script>
+  <style>
+    :root {
+      --bg: #ffe4e4;
+      --drk: #3a1000;
+    }
+
+    html {
+      background: var(--bg);
+      color: var(--drk);
+      font-family: Mooli;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      /* start with zero opacity to prevent unstyled content flashing on load  */
+      opacity: 0;
+    }
+  </style>
+  <link rel="manifest" href="/{base_path}/manifest.json" />
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8" />
+</head>
+
+<body>
+  <div id="main"></div>
+</body>
+
 </html>
