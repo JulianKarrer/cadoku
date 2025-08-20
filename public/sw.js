@@ -7,13 +7,15 @@
 */
 var version = 'v1.0.0::';
 
+const PREFIX = "cadoku/"
+
 /* These resources will be downloaded and cached by the service worker
    during the installation process. If any resource fails to be downloaded,
    then the service worker won't be installed either.
 */
 var offlineFundamentals = [
   // add here the files you want to cache
-  'favicon.ico',
+  PREFIX + 'favicon.ico',
   // 'assets/fonts/Mooli.ttf',
   // // cat assets
   // 'assets/images/cat/mascot.png',
