@@ -5,39 +5,18 @@
 /* A version number is useful when updating the worker logic,
    allowing you to remove outdated cache entries during the update.
 */
-var version = 'v1.0.0::';
+// var version = 'v1.0.0::'; // HANDLED IN JUSTFILE
 
-const PREFIX = "cadoku/"
 
 /* These resources will be downloaded and cached by the service worker
    during the installation process. If any resource fails to be downloaded,
    then the service worker won't be installed either.
 */
-var offlineFundamentals = [
-  // add here the files you want to cache
-  PREFIX + 'favicon.ico',
-  // 'assets/fonts/Mooli.ttf',
-  // // cat assets
-  // 'assets/images/cat/mascot.png',
-  // 'assets/images/cat/hearts.png',
-  // 'assets/images/cat/happy.png',
-  // 'assets/images/cat/sparkle.png',
-  // 'assets/images/cat/easy.png',
-  // 'assets/images/cat/medium.png',
-  // 'assets/images/cat/hard.png',
-  // 'assets/images/cat/challenge.png',
-  // 'assets/images/cat/firework.png',
-  // 'assets/images/fireworks/0.png',
-  // 'assets/images/fireworks/1.png',
-  // 'assets/images/fireworks/2.png',
-  // 'assets/images/fireworks/3.png',
-  // 'assets/images/fireworks/4.png',
-  // 'assets/images/fireworks/5.png',
-  // 'assets/images/fireworks/6.png',
-  // 'assets/images/fireworks/7.png',
-  // 'assets/images/fireworks/8.png',
-  // 'assets/images/fireworks/9.png',
-];
+// var offlineFundamentals = [
+//   // add here the files you want to cache
+
+//   // HANDLED IN JUSTFILE
+// ];
 
 /* The install event fires when the service worker is first installed.
    You can use this event to prepare the service worker to be able to serve
