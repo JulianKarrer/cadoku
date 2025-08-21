@@ -5,18 +5,18 @@
 /* A version number is useful when updating the worker logic,
    allowing you to remove outdated cache entries during the update.
 */
-// var version = 'v1.0.0::'; // HANDLED IN JUSTFILE
+var version = 'v1.0.0::'; // HANDLED IN JUSTFILE
 
 
 /* These resources will be downloaded and cached by the service worker
    during the installation process. If any resource fails to be downloaded,
    then the service worker won't be installed either.
 */
-// var offlineFundamentals = [
-//   // add here the files you want to cache
+var offlineFundamentals = [
+  // add here the files you want to cache
 
-//   // HANDLED IN JUSTFILE
-// ];
+  // HANDLED IN JUSTFILE
+];
 
 /* The install event fires when the service worker is first installed.
    You can use this event to prepare the service worker to be able to serve
