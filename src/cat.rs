@@ -92,10 +92,7 @@ const FIREWORK_OPTIONS: ImageAssetOptions = ImageAssetOptions::new()
         height: 2 * CAT_ASSET_PX,
     })
     .with_format(ImageFormat::Avif);
-const CAT_NORMAL: Asset = asset!(
-    "assets/images/cat/mascot.png",
-    CAT_OPTIONS.with_preload(true)
-);
+const CAT_NORMAL: Asset = asset!("assets/images/cat/mascot.png", CAT_OPTIONS);
 const CAT_HEARTS: Asset = asset!("assets/images/cat/hearts.png", CAT_OPTIONS);
 const CAT_HAPPY: Asset = asset!("assets/images/cat/happy.png", CAT_OPTIONS);
 const CAT_VERY_HAPPY: Asset = asset!("assets/images/cat/sparkle.png", CAT_OPTIONS);
