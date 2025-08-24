@@ -1,200 +1,307 @@
 "use strict";
 
-//console.log('WORKER: executing.');
+/**
+ * Single, unchanging service worker.
+ *
+ * This SW expects a same-origin JS file `cached_asset_list.js` in the same scope
+ * as the service worker file. That file must define:
+ *
+ *   const version = "2025-08-24T14:56:00Z";
+ *   const offlineFundamentals = [ "cadoku/...", ... ];
+ *
+ * Your justfile can keep generating cached_asset_list.js exactly as you already do.
+ */
 
-/* A version number is useful when updating the worker logic,
-   allowing you to remove outdated cache entries during the update.
-*/
-// var version = 'v1.0.0::'; // HANDLED IN JUSTFILE
+/* ------------------------
+   Config
+   ------------------------ */
+const CACHE_PREFIX = "cadoku-cache:"; // prefix; caches are named like `${CACHE_PREFIX}${version}::fundamentals`
+const REMOTE_ASSET_LIST = new URL("cached_asset_list.js", self.location).href; // resolved relative to sw.js
 
+/* ------------------------
+   SW lifecycle: install
+   ------------------------ */
+self.addEventListener("install", (event) => {
+  // The install step tries to fetch the asset list and pre-cache the listed assets.
+  event.waitUntil((async () => {
+    try {
+      const data = await fetchRemoteAssetList();
+      if (!data) {
+        console.warn("sw: install - no remote asset list available; continuing without pre-cache.");
+        return;
+      }
+      const { version, assets } = data;
+      const fundCacheName = `${CACHE_PREFIX}${version}::fundamentals`;
+      const cache = await caches.open(fundCacheName);
 
-// /* These resources will be downloaded and cached by the service worker
-//    during the installation process. If any resource fails to be downloaded,
-//    then the service worker won't be installed either.
-// */
-// var offlineFundamentals = [
-//   // add here the files you want to cache
-
-//   // HANDLED IN JUSTFILE
-// ];
-
-/* The install event fires when the service worker is first installed.
-   You can use this event to prepare the service worker to be able to serve
-   files while visitors are offline.
-*/
-self.addEventListener("install", function (event) {
-  //console.log('WORKER: install event in progress.');
-  /* Using event.waitUntil(p) blocks the installation process on the provided
-     promise. If the promise is rejected, the service worker won't be installed.
-  */
-  event.waitUntil(
-    /* The caches built-in is a promise-based API that helps you cache responses,
-       as well as finding and deleting them.
-    */
-    caches
-      /* You can open a cache by name, and this method returns a promise. We use
-         a versioned cache name here so that we can remove old cache entries in
-         one fell swoop later, when phasing out an older service worker.
-      */
-      .open(version + 'fundamentals')
-      .then(function (cache) {
-        /* After the cache is opened, we can fill it with the offline fundamentals.
-           The method below will add all resources in `offlineFundamentals` to the
-           cache, after making requests for them.
-        */
-        return cache.addAll(offlineFundamentals);
-      })
-      .then(function () {
-        //console.log('WORKER: install completed');
-      })
-  );
+      // Best-effort: fetch and store assets individually (so single 404 won't abort install).
+      await Promise.all(assets.map(async (asset) => {
+        try {
+          const r = await fetch(asset, { cache: "no-store" });
+          if (r && r.ok) await cache.put(asset, r.clone());
+          else console.warn("sw: install - failed to fetch asset", asset, r && r.status);
+        } catch (e) {
+          console.warn("sw: install - exception fetching asset", asset, e);
+        }
+      }));
+    } catch (e) {
+      console.warn("sw: install - asset-list fetch failed:", e);
+      // Don't re-throw: allow SW to install so previously cached assets still work.
+    }
+  })());
 });
 
-/* The fetch event fires whenever a page controlled by this service worker requests
-   a resource. This isn't limited to `fetch` or even XMLHttpRequest. Instead, it
-   comprehends even the request for the HTML page on first load, as well as JS and
-   CSS resources, fonts, any images, etc.
-*/
-self.addEventListener("fetch", function (event) {
-  //console.log('WORKER: fetch event in progress.');
+/* ------------------------
+   SW lifecycle: activate
+   ------------------------ */
+self.addEventListener("activate", (event) => {
+  event.waitUntil((async () => {
+    // Determine the latest cached version (if any) and remove caches that don't match it:
+    const current = await getHighestCachedVersion();
+    if (current) {
+      // delete caches not matching the current version (keep both fundamentals and pages for current)
+      const keys = await caches.keys();
+      await Promise.all(keys
+        .filter(k => !k.startsWith(`${CACHE_PREFIX}${current}`))
+        .map(k => caches.delete(k))
+      );
+    }
+    // Claim clients so this SW controls pages immediately (no reload required to be controlled).
+    await self.clients.claim();
 
-  /* We should only cache GET requests, and deal with the rest of method in the
-     client-side, by handling failed POST,PUT,PATCH,etc. requests.
-  */
-  if (event.request.method !== 'GET') {
-    /* If we don't block the event as shown below, then the request will go to
-       the network as usual.
-    */
-    //console.log('WORKER: fetch event ignored.', event.request.method, event.request.url);
+    // Try a remote check to see if a newer version exists and prefetch it.
+    try {
+      await checkRemoteAssetListAndUpdateIfNeeded();
+    } catch (e) {
+      // non-fatal
+      console.warn("sw: activate - remote check failed", e);
+    }
+  })());
+});
+
+/* ------------------------
+   Fetch handler - caching strategies
+   ------------------------ */
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+
+  // Only handle GET requests
+  if (req.method !== "GET") return;
+
+  // Determine if navigation (HTML) request
+  const accept = req.headers.get("Accept") || "";
+  if (req.mode === "navigate" || accept.includes("text/html")) {
+    // network-first for navigations: fetch latest HTML but fall back to cache for offline
+    event.respondWith(networkFirst(req));
+    // non-blocking update check on navigation to pick up new builds quicker
+    event.waitUntil((async () => {
+      try {
+        await checkRemoteAssetListAndUpdateIfNeeded();
+      } catch (e) {
+        // ignore
+      }
+    })());
     return;
   }
-  /* Similar to event.waitUntil in that it blocks the fetch event on a promise.
-     Fulfillment result will be used as the response, and rejection will end in a
-     HTTP response indicating failure.
-  */
-  event.respondWith(
-    caches
-      /* This method returns a promise that resolves to a cache entry matching
-         the request. Once the promise is settled, we can then provide a response
-         to the fetch request.
-      */
-      .match(event.request)
-      .then(function (cached) {
-        /* Even if the response is in our cache, we go to the network as well.
-           This pattern is known for producing "eventually fresh" responses,
-           where we return cached responses immediately, and meanwhile pull
-           a network response and store that in the cache.
 
-           Read more:
-           https://ponyfoo.com/articles/progressive-networking-serviceworker
-        */
-        var networked = fetch(event.request)
-          // We handle the network request with success and failure scenarios.
-          .then(fetchedFromNetwork, unableToResolve)
-          // We should catch errors on the fetchedFromNetwork handler as well.
-          .catch(unableToResolve);
-
-        /* We return the cached response immediately if there is one, and fall
-           back to waiting on the network as usual.
-        */
-        //console.log('WORKER: fetch event', cached ? '(cached)' : '(network)', event.request.url);
-        return cached || networked;
-
-        function fetchedFromNetwork(response) {
-          /* We copy the response before replying to the network request.
-             This is the response that will be stored on the ServiceWorker cache.
-          */
-          var cacheCopy = response.clone();
-
-          //console.log('WORKER: fetch response from network.', event.request.url);
-
-          caches
-            // We open a cache to store the response for this request.
-            .open(version + 'pages')
-            .then(function add(cache) {
-              /* We store the response for this request. It'll later become
-                 available to caches.match(event.request) calls, when looking
-                 for cached responses.
-              */
-              cache.put(event.request, cacheCopy);
-            })
-            .then(function () {
-              //console.log('WORKER: fetch response stored in cache.', event.request.url);
-            });
-
-          // Return the response so that the promise is settled in fulfillment.
-          return response;
-        }
-
-        /* When this method is called, it means we were unable to produce a response
-           from either the cache or the network. This is our opportunity to produce
-           a meaningful response even when all else fails. It's the last chance, so
-           you probably want to display a "Service Unavailable" view or a generic
-           error response.
-        */
-        function unableToResolve() {
-          /* There's a couple of things we can do here.
-             - Test the Accept header and then return one of the `offlineFundamentals`
-               e.g: `return caches.match('/some/cached/image.png')`
-             - You should also consider the origin. It's easier to decide what
-               "unavailable" means for requests against your origins than for requests
-               against a third party, such as an ad provider.
-             - Generate a Response programmatically, as shown below, and return that.
-          */
-
-          //console.log('WORKER: fetch request failed in both cache and network.');
-
-          /* Here we're creating a response programmatically. The first parameter is the
-             response body, and the second one defines the options for the response.
-          */
-          return new Response('<h1>Service Unavailable</h1>', {
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: new Headers({
-              'Content-Type': 'text/html'
-            })
-          });
-        }
-      })
-  );
+  // For other assets: cache-first then update cache from network in background
+  event.respondWith(cacheFirstThenUpdate(req));
 });
 
-/* The activate event fires after a service worker has been successfully installed.
-   It is most useful when phasing out an older version of a service worker, as at
-   this point you know that the new worker was installed correctly. In this example,
-   we delete old caches that don't match the version in the worker we just finished
-   installing.
-*/
-self.addEventListener("activate", function (event) {
-  /* Just like with the install event, event.waitUntil blocks activate on a promise.
-     Activation will fail unless the promise is fulfilled.
-  */
-  //console.log('WORKER: activate event in progress.');
-
-  event.waitUntil(
-    caches
-      /* This method returns a promise which will resolve to an array of available
-         cache keys.
-      */
-      .keys()
-      .then(function (keys) {
-        // We return a promise that settles when all outdated caches are deleted.
-        return Promise.all(
-          keys
-            .filter(function (key) {
-              // Filter by keys that don't start with the latest version prefix.
-              return !key.startsWith(version);
-            })
-            .map(function (key) {
-              /* Return a promise that's fulfilled
-                 when each outdated cache is deleted.
-              */
-              return caches.delete(key);
-            })
-        );
-      })
-      .then(function () {
-        //console.log('WORKER: activate completed.');
-      })
-  );
+/* ------------------------
+   Message handler (client <> SW)
+   ------------------------ */
+self.addEventListener("message", (event) => {
+  const msg = event.data || {};
+  if (msg && msg.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+  if (msg && msg.type === "CHECK_FOR_UPDATE") {
+    event.waitUntil(checkRemoteAssetListAndUpdateIfNeeded()
+      .catch(e => console.warn("sw: manual check failed:", e)));
+    return;
+  }
 });
+
+/* ------------------------
+   Strategies implementations
+   ------------------------ */
+
+async function networkFirst(request) {
+  try {
+    const networkResponse = await fetch(request);
+    // store a copy into pages cache for offline fallback
+    const current = await getHighestCachedVersion();
+    const pagesCacheName = current ? `${CACHE_PREFIX}${current}::pages` : null;
+    if (pagesCacheName) {
+      try {
+        const c = await caches.open(pagesCacheName);
+        // best-effort; ignore failures for opaque responses
+        await c.put(request, networkResponse.clone());
+      } catch (e) {
+        // ignore caching error
+      }
+    }
+    return networkResponse;
+  } catch (e) {
+    // network failed -> try cache
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    // last-resort offline HTML
+    return new Response("<h1>Service Unavailable</h1><p>Offline</p>", {
+      status: 503,
+      statusText: "Service Unavailable",
+      headers: { "Content-Type": "text/html" }
+    });
+  }
+}
+
+async function cacheFirstThenUpdate(request) {
+  // caches.match searches across all caches
+  const cached = await caches.match(request);
+  // Kick off a fetch to update cache in background
+  const fetchPromise = fetch(request).then(async (resp) => {
+    if (!resp || !resp.ok) return resp;
+    const current = await getHighestCachedVersion();
+    const pagesCacheName = current ? `${CACHE_PREFIX}${current}::pages` : null;
+    if (pagesCacheName) {
+      try {
+        const c = await caches.open(pagesCacheName);
+        await c.put(request, resp.clone());
+      } catch (e) {
+        // ignore
+      }
+    }
+    return resp;
+  }).catch(() => null);
+
+  return cached || fetchPromise;
+}
+
+/* ------------------------
+   Remote asset-list fetching & update functions
+   ------------------------ */
+
+/**
+ * Fetch cached_asset_list.js and parse it.
+ * Returns { version: string, assets: string[] } or throws on parse error.
+ */
+async function fetchRemoteAssetList() {
+  const res = await fetch(REMOTE_ASSET_LIST, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error("failed to fetch asset list: " + res.status);
+  }
+  const text = await res.text();
+
+  // Parse version
+  const versionMatch = text.match(/const\s+version\s*=\s*["']([^"']+)["']/);
+  if (!versionMatch) throw new Error("version not found in asset list");
+  const version = versionMatch[1];
+
+  // Parse offlineFundamentals array literal
+  const arrMatch = text.match(/const\s+offlineFundamentals\s*=\s*(\[[\s\S]*?\]);/);
+  if (!arrMatch) throw new Error("offlineFundamentals not found in asset list");
+
+  // Evaluate the array literal in a constrained manner.
+  // This is acceptable here because cached_asset_list.js is generated by your build and same-origin.
+  let assets;
+  try {
+    assets = (new Function("return " + arrMatch[1]))();
+    if (!Array.isArray(assets)) throw new Error("offlineFundamentals is not an array");
+  } catch (e) {
+    throw new Error("failed to parse offlineFundamentals array: " + e.message);
+  }
+
+  return { version, assets };
+}
+
+/**
+ * Determine the highest (latest) cached version present in caches.
+ * We look for cache keys that match `${CACHE_PREFIX}${version}::fundamentals` and pick the max version.
+ * Returns the version string or null if none found.
+ */
+async function getHighestCachedVersion() {
+  const keys = await caches.keys();
+  const versions = keys.map(k => {
+    const m = k.match(new RegExp('^' + escapeRegExp(CACHE_PREFIX) + '(.+?)::fundamentals$'));
+    return m ? m[1] : null;
+  }).filter(Boolean);
+  if (versions.length === 0) return null;
+  // version strings are ISO timestamps - lexicographic max works.
+  versions.sort();
+  return versions[versions.length - 1];
+}
+
+/**
+ * Check remote cached_asset_list.js and update caches if remote version is newer than
+ * currently cached version. This will:
+ *  - fetch the remote list
+ *  - if remoteVersion != current cached version:
+ *      * create new fundamentals cache and attempt to fetch & put each asset
+ *      * create a new pages cache (empty)
+ *      * delete old caches not matching the new version
+ *      * postMessage to clients { type: "NEW_VERSION_AVAILABLE", version: remoteVersion }
+ */
+async function checkRemoteAssetListAndUpdateIfNeeded() {
+  let data;
+  try {
+    data = await fetchRemoteAssetList();
+  } catch (e) {
+    // Can't fetch remote list — abort update.
+    throw e;
+  }
+
+  const remoteVersion = data.version;
+  const remoteAssets = data.assets;
+
+  const current = await getHighestCachedVersion();
+  if (current === remoteVersion) {
+    return { updated: false, reason: "versions match" };
+  }
+
+  // Create new caches for remoteVersion
+  const newFundName = `${CACHE_PREFIX}${remoteVersion}::fundamentals`;
+  const newPagesName = `${CACHE_PREFIX}${remoteVersion}::pages`;
+  const fundCache = await caches.open(newFundName);
+
+  // Best-effort: fetch each asset and cache it. Do not abort entire operation if one fails.
+  await Promise.all(remoteAssets.map(async (asset) => {
+    try {
+      const r = await fetch(asset, { cache: "no-store" });
+      if (r && r.ok) {
+        await fundCache.put(asset, r.clone());
+      } else {
+        console.warn("sw: update - asset fetch failed:", asset, r && r.status);
+      }
+    } catch (e) {
+      console.warn("sw: update - asset fetch exception:", asset, e);
+    }
+  }));
+
+  // Create pages cache (empty) for new version
+  await caches.open(newPagesName);
+
+  // Remove old caches that don't belong to new remoteVersion
+  const keys = await caches.keys();
+  await Promise.all(keys
+    .filter(k => !k.startsWith(`${CACHE_PREFIX}${remoteVersion}`))
+    .map(k => caches.delete(k))
+  );
+
+  // Notify clients (pages)
+  const allClients = await self.clients.matchAll({ includeUncontrolled: true });
+  for (const client of allClients) {
+    client.postMessage({ type: "NEW_VERSION_AVAILABLE", version: remoteVersion });
+  }
+
+  return { updated: true, newVersion: remoteVersion };
+}
+
+/* ------------------------
+   Utilities
+   ------------------------ */
+
+function escapeRegExp(string) {
+  return string.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
+}
