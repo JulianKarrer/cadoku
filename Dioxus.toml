@@ -4,15 +4,13 @@ name = "Cadoku"
 [bundle]
 identifier = "de.juliankarrer"
 publisher = "Julian Karrer"
+copyright = "Copyright 2025 Julian Karrer"
+category = "PuzzleGame"
+short_description = "A cozy, cat-themed sudoku app"
+
 icon = ["assets/icon.png"]
-
-# desktop, web, mobile, ssr
 default_platform = "web"
-
-# `build` & `serve` dist path
 out_dir = "docs"
-
-# resource (public) file folder
 asset_dir = "public"
 
 [web.app]
@@ -20,9 +18,7 @@ title = "Cadoku"
 base_path = "cadoku"
 
 [web.watcher]
-
-# when watcher trigger, regenerate the `index.html`
 reload_html = true
-
-# which files or dirs will be watcher monitoring
 watch_path = ["src", "public", "assets"]
+index_on_404 = true
+

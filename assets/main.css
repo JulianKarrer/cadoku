@@ -6,9 +6,11 @@
     --hlt: #ffcccc;
 
     --w: min(80vmin, 50vh);
-    --h1: calc(0.1 * var(--w));
 
-    --sqrfnt: calc(0.07 * var(--w));
+    --fntsize-h1: max(16pt, calc(0.150 * var(--w)));
+    --fntsize-med: max(0pt, calc(0.070 * var(--w)));
+    --fntsize-small: max(12pt, calc(0.035 * var(--w)));
+
     --lthin: calc(0.0025 * var(--w));
     --lmed: calc(0.007 * var(--w));
     --lthick: calc(0.020 * var(--w));
@@ -16,7 +18,18 @@
 
 /* GENERAL STYLING */
 * {
+    /* ensure that borders are accountet for in width */
     box-sizing: border-box;
+}
+
+html,
+body {
+    /* set height to 100% to account for menu bar on mobile */
+    height: 100%;
+}
+
+#main {
+    height: 100%;
 }
 
 body {
@@ -29,27 +42,31 @@ body {
     opacity: 1;
 }
 
+
 .cntr {
     display: flex;
     justify-content: center;
-    align-items: center;
     position: relative;
+    align-items: center;
     flex-direction: column;
 }
 
 .btm {
+    z-index: 1;
+    flex-direction: column;
     justify-content: center;
     align-items: end;
-    display: flex;
-    position: relative;
     width: fit-content;
+    display: flex;
+    position: fixed;
     left: 50%;
-    transform: translateX(-50%);
-    z-index: 1;
+    transform: translate3d(-50%, -50%, 0);
+    top: 45%;
 }
 
 h1 {
-    font-size: var(--h1);
+    font-size: var(--fntsize-h1);
+    margin-bottom: 5px;
 }
 
 :focus {
@@ -78,7 +95,7 @@ h1 {
     padding: 0;
     /* font settings */
     color: var(--drk);
-    font-size: var(--sqrfnt);
+    font-size: var(--fntsize-med);
     text-align: center;
     font-family: Mooli;
 }
@@ -106,7 +123,7 @@ input {
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: var(--sqrfnt);
+    font-size: var(--fntsize-med);
 }
 
 .subgrid {
@@ -140,13 +157,13 @@ input {
 .num-button {
     /* font */
     color: var(--lgt);
-    font-size: var(--sqrfnt);
+    font-size: var(--fntsize-med);
     text-align: center;
     font-family: Mooli;
     /* layout */
-    width: calc(1.4 * var(--sqrfnt));
+    width: calc(1.4 * var(--fntsize-med));
     aspect-ratio: 1;
-    margin: calc(0.07*var(--sqrfnt));
+    margin: calc(0.07*var(--fntsize-med));
     margin-top: 10px;
     position: relative;
     z-index: 3;
@@ -159,7 +176,7 @@ input {
 
 .button-container {
     position: absolute;
-    bottom: calc(-2 * var(--sqrfnt));
+    bottom: calc(-2 * var(--fntsize-med));
 }
 
 /* CAT STYLING */
@@ -172,7 +189,7 @@ img {
 }
 
 .cat {
-    position: absolute;
+    position: fixed;
     bottom: 0;
     left: 50%;
     transform: translateX(-50%);
@@ -183,7 +200,7 @@ img {
 .exit-btn {
     /* font */
     color: var(--drk);
-    font-size: calc(0.5 * var(--sqrfnt));
+    font-size: var(--fntsize-small);
     text-align: center;
     font-family: Mooli;
     /* styling */
@@ -192,8 +209,7 @@ img {
     border: 0px;
     cursor: pointer;
     /* layout/shape */
-    position: absolute;
-    top: calc(-0.1 * var(--w));
+    /* position: absolute; */
     height: calc(0.1 * var(--w));
     aspect-ratio: 2;
 }
@@ -207,18 +223,18 @@ img {
 .menu-button {
     /* font */
     color: var(--drk);
-    font-size: var(--sqrfnt);
+    font-size: var(--fntsize-med);
     text-align: center;
     font-family: Mooli;
     /* styling */
     background: var(--bg);
     border: 2px solid var(--drk);
-    border-radius: var(--sqrfnt);
+    border-radius: var(--fntsize-med);
     cursor: pointer;
     /* layout/shape */
     width: calc(0.6 * var(--w));
     aspect-ratio: 4;
-    margin: calc(0.2 * var(--sqrfnt));
+    margin: calc(0.2 * var(--fntsize-med));
 }
 
 .menu-btn-focused {

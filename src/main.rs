@@ -93,10 +93,16 @@ fn app() -> Element {
                 focused.set(false) ; },
             onkeydown: move |e| {*key_pressed.write() = Some(e.code());
             },
-            // header: title
+            // header: title and quit
             div{
                 class: "cntr",
-                h1 { "Cadoku!" }
+                h1 { "Cadoku!" },
+                button {
+                    class: "exit-btn",
+                    style:  if !*playing.read() {"opacity: 0; cursor: auto;"} else {""},
+                    onclick: move |_| { if *playing.read() { on_quit.call(()); }},
+                    "Quit"
+                },
             },
             if *playing.read(){
                 // main game
@@ -105,12 +111,12 @@ fn app() -> Element {
                         focused.set(true);
                     }; e.stop_propagation();
                 },
-                    Sudoku { sudoku, solution, focused, on_quit, key_pressed },
+                    Sudoku { sudoku, solution, focused, key_pressed },
                 },
             } else{
                 // menu
                 div {
-                    class: "cntr",
+                    class: "btm",
                     for diff in Difficulty::iter(){
                         // each of the buttons for difficulty levels
                         button {
@@ -150,7 +156,6 @@ struct SudokuProps {
     solution: Signal<Vec<u8>>,
     focused: Signal<bool>,
     key_pressed: Signal<Option<Code>>,
-    on_quit: EventHandler<()>,
 }
 
 /// Main component of the game: a grid displaying the sudoku cues and providing input functionality.
@@ -252,11 +257,6 @@ fn Sudoku(props: SudokuProps) -> Element {
 
     rsx! (
         div { class: "btm",
-        button {
-            class: "exit-btn",
-            onclick: move |_| { props.on_quit.call(());},
-            "Quit"
-        },
         div { class: "grid",
             for gy in 0..3 {
             for gx in 0..3 {
@@ -268,7 +268,7 @@ fn Sudoku(props: SudokuProps) -> Element {
                         div {  style: "position: relative;",
                             if board.read().is_zero(3*gx+x,3*gy+y){
                                 // if the square is empty, show an input field
-                                input {
+                                button {
                                     // whether the square is unfocused
                                     // lightly highlighted (in same row or column as cursor)
                                     // or strongly highlighted (at the cursor)

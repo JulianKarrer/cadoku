@@ -16,3 +16,5 @@ build-web:
     # move screenshots and custom html/js/favicon content in "public"
     cp -R screenshots docs/screenshots
     cp -R public/* docs
+
+    cp docs/index.html docs/404.html
