@@ -73,7 +73,7 @@
       "sizes": "1500x2664"
     }
   ],
-  "start_url": "/",
+  "start_url": "/cadoku/",
   "id": "/",
   "display": "standalone",
   "display_override": [
