@@ -1,126 +1,129 @@
 "use strict";
 
 /**
- * Unchanging service worker. Expects a same-origin JS file
- * `cached_asset_list.js` in the same directory/scope as this SW that defines:
+ * Single, unchanging service worker.
  *
- *   const version = "2025-08-24T14:56:00Z";
- *   const offlineFundamentals = [ "cadoku/...", ... ];
+ * Expects a same-origin file `cached_asset_list.js` in the same scope that defines:
+ *   const version = "<ISO-timestamp>";
+ *   const offlineFundamentals = [ "path/to/asset", ... ];
  *
- * The SW will:
- *  - fetch the list at runtime,
- *  - pre-cache assets into a cache named "cadoku-cache:<version>::fundamentals",
- *  - serve cached assets offline,
- *  - network-first for navigations (with fallback to cached app-shell),
- *  - detect remote updates and create a new versioned cache, then delete old caches,
- *  - notify clients with postMessage({type: "NEW_VERSION_AVAILABLE", version}).
+ * Behavior:
+ * - install: try to fetch cached_asset_list.js and pre-cache the listed assets + app-shell.
+ * - activate: keep only the latest versioned caches and claim clients.
+ * - fetch:
+ *    * network-first for the asset list & navigations (fallback to cached app-shell)
+ *    * cache-first then update for other static assets
+ * - update: fetch the remote asset list, if version differs download assets into new
+ *   cache and delete old caches; postMessage clients {type: "NEW_VERSION_AVAILABLE", version}.
  */
 
 /* ------------------------
    Configuration
    ------------------------ */
-const CACHE_PREFIX = "cadoku-cache:";                     // caches named like `${CACHE_PREFIX}${version}::fundamentals`
-const REMOTE_ASSET_LIST = new URL("cached_asset_list.js", self.location).href;
+const CACHE_PREFIX = "cadoku-cache:"; // final caches: `${CACHE_PREFIX}${version}::fundamentals` or `::pages`
+const REMOTE_ASSET_LIST = new URL("cached_asset_list.js", self.location).href; // resolved relative to this SW
+const APP_SHELL_FILENAMES = ["", "index.html", "404.html", "manifest.json"]; // appended to scope base
 
 /* ------------------------
-   Lifecycle: install
+   Install: prefetch asset list + assets (best-effort)
    ------------------------ */
 self.addEventListener("install", (event) => {
-  // Try to fetch and pre-cache the remote asset list. If it fails, we still install
-  // so previously-cached assets continue working.
   event.waitUntil((async () => {
     try {
-      const data = await fetchRemoteAssetList();
-      if (!data) return; // nothing to pre-cache
+      const data = await fetchRemoteAssetList(); // may throw
       const { version, assets } = data;
       const fundCacheName = `${CACHE_PREFIX}${version}::fundamentals`;
       const cache = await caches.open(fundCacheName);
 
-      // Also ensure app shell entries exist (scope root, index, 404, manifest)
-      const scopeBase = ensureTrailingSlash(self.registration.scope || new URL('.', self.location).href);
-      const appShellCandidates = [
-        scopeBase,
-        new URL('index.html', scopeBase).href,
-        new URL('404.html', scopeBase).href,
-        new URL('manifest.json', scopeBase).href
-      ];
+      // Determine app-shell absolute URLs (scope base)
+      const scopeBase = ensureTrailingSlash(self.registration?.scope || new URL('.', self.location).href);
+      const appShell = APP_SHELL_FILENAMES.map(f => new URL(f, scopeBase).href);
 
-      // Normalize all assets to absolute URLs, dedupe
+      // Normalize asset urls and dedupe
       const normalized = dedupeArray(
-        appShellCandidates.concat(assets.map(a => new URL(a, self.location).href))
+        appShell.concat(assets.map(a => normalizeAssetUrl(a)))
       );
 
-      // Best-effort fetch+put each resource (so single 404 doesn't abort install)
+      // Best-effort: fetch and put each (so single 404 won't abort install)
       await Promise.all(normalized.map(async (url) => {
         try {
-          const r = await fetch(url, { cache: "no-store" });
+          const r = await fetch(url, { cache: "no-store", credentials: "same-origin" });
           if (r && r.ok) await cache.put(url, r.clone());
-          else console.warn("sw: install - failed to fetch asset", url, r && r.status);
+          else console.warn("sw: install - asset fetch failed", url, r && r.status);
         } catch (e) {
-          console.warn("sw: install - exception fetching asset", url, e);
+          console.warn("sw: install - asset fetch exception", url, e);
         }
       }));
     } catch (e) {
-      // non-fatal: allow install to succeed
-      console.warn("sw: install - could not fetch asset list:", e);
+      // Non-fatal: allow worker to install so previously-cached version continues to work.
+      console.warn("sw: install - could not prefetch asset list or assets:", e);
     }
+    // do NOT call skipWaiting here — let client control activation unless you want aggressive takeover
   })());
 });
 
 /* ------------------------
-   Lifecycle: activate
+   Activate: clean up old caches + claim clients; try background update
    ------------------------ */
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    // Keep only the highest-version caches and delete others
-    const current = await getHighestCachedVersion();
-    if (current) {
-      const keys = await caches.keys();
-      await Promise.all(keys
-        .filter(k => !k.startsWith(`${CACHE_PREFIX}${current}`))
-        .map(k => caches.delete(k))
-      );
-    }
-    await self.clients.claim();
-
-    // Opportunistic remote check & prefetch of new version
     try {
-      await checkRemoteAssetListAndUpdateIfNeeded();
+      const current = await getHighestCachedVersion();
+      if (current) {
+        const keys = await caches.keys();
+        await Promise.all(keys
+          .filter(k => !k.startsWith(`${CACHE_PREFIX}${current}`))
+          .map(k => caches.delete(k))
+        );
+      }
+      await self.clients.claim();
+
+      // Opportunistic: check remote list & update in background
+      try { await checkRemoteAssetListAndUpdateIfNeeded(); } catch (e) { /* ignore */ }
     } catch (e) {
-      // ignore
-      console.warn("sw: activate - remote check failed", e);
+      console.warn("sw: activate error", e);
     }
   })());
 });
 
 /* ------------------------
-   Fetch handler - strategies
+   Fetch: strategies
    ------------------------ */
 self.addEventListener("fetch", (event) => {
   const req = event.request;
 
-  // Let non-GET fall through to network
+  // Only handle GET requests in the SW
   if (req.method !== "GET") return;
 
-  // Accept header for HTML detection
-  const accept = req.headers.get("Accept") || "";
-
-  // Navigation requests (pages) => network-first (fresh), fallback to app-shell
-  if (req.mode === "navigate" || accept.includes("text/html")) {
-    event.respondWith(networkFirst(req));
-    // non-blocking background update-check
-    event.waitUntil((async () => {
-      try { await checkRemoteAssetListAndUpdateIfNeeded(); } catch (e) { /* ignore */ }
-    })());
+  // If browser asks for root-level favicon.ico (often requested from the site root),
+  // respond with a safe empty response (204) if we cannot serve it from cache/network.
+  // We special-case it to avoid the Response-body-with-204 bug and noisy logs.
+  if (req.url.endsWith("/favicon.ico")) {
+    event.respondWith(handleFaviconRequest(req));
     return;
   }
 
-  // All other GET requests => cache-first, update in background
+  // Always treat the remote asset list script specially: prefer network, fallback to cache
+  if (urlsEqualSansHash(req.url, REMOTE_ASSET_LIST)) {
+    event.respondWith(networkFirst(req));
+    return;
+  }
+
+  // Navigation requests — network-first (so users get fresh HTML) with offline app-shell fallback
+  const accept = req.headers.get("Accept") || "";
+  if (req.mode === "navigate" || accept.includes("text/html")) {
+    event.respondWith(networkFirst(req));
+    // Also start a background update-check (non-blocking)
+    event.waitUntil(checkRemoteAssetListAndUpdateIfNeeded().catch(() => { }));
+    return;
+  }
+
+  // Other requests — cache-first then update in background
   event.respondWith(cacheFirstThenUpdate(req));
 });
 
 /* ------------------------
-   Message handler (client -> SW)
+   Message handling (client -> SW)
    ------------------------ */
 self.addEventListener("message", (event) => {
   const msg = event.data || {};
@@ -135,28 +138,32 @@ self.addEventListener("message", (event) => {
 });
 
 /* ------------------------
-   Strategies
+   Strategies implementations
    ------------------------ */
 
 async function networkFirst(request) {
   try {
     const networkResponse = await fetch(request);
-    // store a copy in pages cache for offline fallback (best-effort)
-    const current = await getHighestCachedVersion();
-    if (current) {
-      try {
-        const pages = await caches.open(`${CACHE_PREFIX}${current}::pages`);
-        await pages.put(request, networkResponse.clone());
-      } catch (e) { /* ignore caching errors */ }
-    }
+    // best-effort cache copy for pages fallback
+    try {
+      const current = await getHighestCachedVersion();
+      if (current) {
+        const pagesCache = await caches.open(`${CACHE_PREFIX}${current}::pages`);
+        await pagesCache.put(request, networkResponse.clone());
+      }
+    } catch (e) { /* ignore caching errors */ }
     return networkResponse;
   } catch (err) {
-    // Network failed -> try cache (exact match or app-shell fallback)
+    // network failed => try cache
     const cached = await caches.match(request);
     if (cached) return cached;
-    const scopeBase = ensureTrailingSlash(self.registration.scope || new URL('.', self.location).href);
-    const indexMatch = await caches.match(scopeBase) || await caches.match(new URL('index.html', scopeBase).href) || await caches.match(new URL('404.html', scopeBase).href);
-    if (indexMatch) return indexMatch;
+
+    // fallback to app-shell
+    const scopeBase = ensureTrailingSlash(self.registration?.scope || new URL('.', self.location).href);
+    const appShellMatch = await caches.match(scopeBase) ||
+      await caches.match(new URL('index.html', scopeBase).href) ||
+      await caches.match(new URL('404.html', scopeBase).href);
+    if (appShellMatch) return appShellMatch;
 
     // final fallback HTML response
     return new Response("<h1>Service Unavailable</h1><p>Offline</p>", {
@@ -168,52 +175,54 @@ async function networkFirst(request) {
 }
 
 async function cacheFirstThenUpdate(request) {
-  // Try cache first
+  // try cache first
   const cached = await caches.match(request);
-  // Kick off network fetch to update cache in background
+  // start network update in background
   const fetchPromise = fetch(request).then(async (resp) => {
     if (!resp || !resp.ok) return resp;
-    const current = await getHighestCachedVersion();
-    if (current) {
-      try {
+    try {
+      const current = await getHighestCachedVersion();
+      if (current) {
         const pages = await caches.open(`${CACHE_PREFIX}${current}::pages`);
         await pages.put(request, resp.clone());
-      } catch (e) { /* ignore */ }
-    }
+      }
+    } catch (e) { /* ignore */ }
     return resp;
   }).catch(() => null);
 
-  // If we have cached response return it immediately
   if (cached) {
-    // still let fetchPromise run in background
+    // let fetchPromise run but ignore result
     fetchPromise.catch(() => { });
     return cached;
   }
 
-  // else wait for network attempt
+  // wait for network result
   const netResp = await fetchPromise;
   if (netResp) return netResp;
 
-  // If nothing available, provide a safe fallback:
-  // - For images (including favicon) return 204 empty response to avoid console errors
-  // - For other resources return 503
+  // nothing available -> safe fallbacks
   const dest = request.destination || "";
   if (dest === "image" || request.url.endsWith("/favicon.ico")) {
-    return new Response('', { status: 204 });
+    // 204 must have null body — use null to avoid Response constructor error
+    return new Response(null, { status: 204, statusText: "No Content" });
   }
+
+  // generic failure
   return new Response("", { status: 503, statusText: "Service Unavailable" });
 }
 
 /* ------------------------
-   Remote asset-list utilities (parsing & update)
+   Asset-list parsing + update logic
    ------------------------ */
 
 /**
- * Fetch-and-parse cached_asset_list.js.
- * Returns { version: string, assets: string[] } with assets as absolute URLs.
+ * Fetch cached_asset_list.js and parse:
+ *   const version = "..."
+ *   const offlineFundamentals = [ ... ];
+ * Returns {version, assets: [absoluteURLs...]}
  */
 async function fetchRemoteAssetList() {
-  const res = await fetch(REMOTE_ASSET_LIST, { cache: "no-store" });
+  const res = await fetch(REMOTE_ASSET_LIST, { cache: "no-store", credentials: "same-origin" });
   if (!res.ok) throw new Error("failed to fetch asset list: " + res.status);
   const text = await res.text();
 
@@ -226,37 +235,31 @@ async function fetchRemoteAssetList() {
 
   let assets;
   try {
+    // Evaluate the array literal into JS array. This is acceptable only because this file
+    // is same-origin and generated by your build process.
     assets = (new Function("return " + arrMatch[1]))();
     if (!Array.isArray(assets)) throw new Error("offlineFundamentals is not an array");
   } catch (e) {
     throw new Error("failed to parse offlineFundamentals array: " + e.message);
   }
 
-  // Normalize assets to absolute URLs (resolve relative to the SW's location)
-  const absolute = assets.map(a => new URL(a, self.location).href);
+  // Normalize each asset into an absolute URL:
+  const absolute = assets.map(a => normalizeAssetUrl(a));
   return { version, assets: absolute };
 }
 
 /**
- * Get the lexicographically highest cached version (ISO timestamps sort lexicographically)
- */
-async function getHighestCachedVersion() {
-  const keys = await caches.keys();
-  const versions = keys.map(k => {
-    const m = k.match(new RegExp('^' + escapeRegExp(CACHE_PREFIX) + '(.+?)::fundamentals$'));
-    return m ? m[1] : null;
-  }).filter(Boolean);
-  if (versions.length === 0) return null;
-  versions.sort();
-  return versions[versions.length - 1];
-}
-
-/**
- * If remote version differs from cached, prefetch remote assets into new cache,
- * delete old caches, and notify clients.
+ * If remote version differs from cached, prefetch remote assets into a new cache,
+ * delete old caches, and postMessage clients.
  */
 async function checkRemoteAssetListAndUpdateIfNeeded() {
-  const data = await fetchRemoteAssetList();
+  let data;
+  try {
+    data = await fetchRemoteAssetList();
+  } catch (e) {
+    // if can't fetch or parse, abort
+    throw e;
+  }
   const remoteVersion = data.version;
   const remoteAssets = data.assets;
 
@@ -267,12 +270,15 @@ async function checkRemoteAssetListAndUpdateIfNeeded() {
   const newPages = `${CACHE_PREFIX}${remoteVersion}::pages`;
   const fundCache = await caches.open(newFund);
 
-  // best-effort: fetch each asset and cache it
+  // Best-effort: fetch each asset and cache it
   await Promise.all(remoteAssets.map(async (url) => {
     try {
-      const r = await fetch(url, { cache: "no-store" });
-      if (r && r.ok) await fundCache.put(url, r.clone());
-      else console.warn("sw: update - asset fetch failed:", url, r && r.status);
+      const r = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+      if (r && r.ok) {
+        await fundCache.put(url, r.clone());
+      } else {
+        console.warn("sw: update - asset fetch failed:", url, r && r.status);
+      }
     } catch (e) {
       console.warn("sw: update - asset fetch exception:", url, e);
     }
@@ -288,7 +294,7 @@ async function checkRemoteAssetListAndUpdateIfNeeded() {
     .map(k => caches.delete(k))
   );
 
-  // notify clients to prompt reload if desired
+  // notify clients (pages)
   const allClients = await self.clients.matchAll({ includeUncontrolled: true });
   for (const client of allClients) {
     client.postMessage({ type: "NEW_VERSION_AVAILABLE", version: remoteVersion });
@@ -298,7 +304,7 @@ async function checkRemoteAssetListAndUpdateIfNeeded() {
 }
 
 /* ------------------------
-   Small helpers
+   Utilities
    ------------------------ */
 
 function escapeRegExp(string) {
@@ -311,4 +317,71 @@ function ensureTrailingSlash(s) {
 
 function dedupeArray(arr) {
   return Array.from(new Set(arr));
+}
+
+/**
+ * Normalize an asset entry from cached_asset_list.js into an absolute URL.
+ * Rules:
+ *  - If it already looks absolute (starts with 'http' or '//') -> leave it.
+ *  - If it starts with '/' -> resolve against origin (absolute path on host).
+ *  - Otherwise -> resolve relative to this SW's scope (so 'assets/..' -> '/cadoku/assets/..').
+ */
+function normalizeAssetUrl(a) {
+  if (typeof a !== "string") return a;
+  const trimmed = a.trim();
+  if (/^https?:\/\//i.test(trimmed) || /^\/\//.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("/")) {
+    // Absolute path on host
+    return new URL(trimmed, self.location.origin).href;
+  }
+  // Relative entry -> resolve relative to service worker location (scope)
+  return new URL(trimmed, self.location).href;
+}
+
+/**
+ * Return lexicographically highest cached version (ISO timestamps sort lexicographically).
+ */
+async function getHighestCachedVersion() {
+  const keys = await caches.keys();
+  const versions = keys.map(k => {
+    const m = k.match(new RegExp('^' + escapeRegExp(CACHE_PREFIX) + '(.+?)::fundamentals$'));
+    return m ? m[1] : null;
+  }).filter(Boolean);
+  if (versions.length === 0) return null;
+  versions.sort();
+  return versions[versions.length - 1];
+}
+
+/**
+ * Compare URLs ignoring hash (since cache keys may differ by hash)
+ */
+function urlsEqualSansHash(a, b) {
+  try {
+    const ua = new URL(a, self.location);
+    const ub = new URL(b, self.location);
+    ua.hash = ""; ub.hash = "";
+    return ua.href === ub.href;
+  } catch (e) {
+    return a === b;
+  }
+}
+
+/**
+ * Handle root-level favicon requests robustly.
+ * Try network, then cache, else return 204 (no content).
+ */
+async function handleFaviconRequest(request) {
+  try {
+    const r = await fetch(request);
+    if (r && r.ok) return r;
+  } catch (e) { /* network failed */ }
+
+  // try cache
+  const cached = await caches.match(request);
+  if (cached) return cached;
+
+  // safe empty 204 with null body to avoid Response constructor error
+  return new Response(null, { status: 204, statusText: "No Content" });
 }
