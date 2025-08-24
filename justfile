@@ -14,7 +14,11 @@ build-web:
     # with current date and time:
 
     # generate cache.tmp
-    echo "const version = \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\";" > public/cache.tmp && echo "const offlineFundamentals = [" >> public/cache.tmp && find docs/assets -type f | sed 's|^|    \"cadoku/|; s|$|\",|' >> public/cache.tmp && sed -i '$ s/,$//' public/cache.tmp && echo "];" >> public/cache.tmp
+    echo "const version = \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\";" > public/cache.tmp && \
+    echo "const offlineFundamentals = [" >> public/cache.tmp && \
+    find docs/assets -type f | sed 's|^docs/|  "cadoku/|' | sed 's|$|",|' >> public/cache.tmp && \
+    sed -i '$ s/,$//' public/cache.tmp && \
+    echo "];" >> public/cache.tmp
 
     # remove top of sw.js
     sed -n '/\/\/ END OF GENERATED CACHE FILES/,$p' ./public/sw.js > ./public/sw.tmp && mv ./public/sw.tmp ./public/sw.js
