@@ -16,7 +16,7 @@ build-web:
     # generate cache.tmp
     echo "const version = \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\";" > public/cache.tmp && \
     echo "const offlineFundamentals = [" >> public/cache.tmp && \
-    find docs/assets -type f | sed 's|^docs/|  "cadoku/|' | sed 's|$|",|' >> public/cache.tmp && \
+    find docs/assets -type f | sed 's|^docs/|  "|' | sed 's|$|",|' >> public/cache.tmp && \
     sed -i '$ s/,$//' public/cache.tmp && \
     echo "];" >> public/cache.tmp
 
