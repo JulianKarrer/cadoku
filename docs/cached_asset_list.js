@@ -1,4 +1,4 @@
-const version = "2025-08-24T15:13:41Z";
+const version = "2025-08-24T15:25:44Z";
 const offlineFundamentals = [
     "cadoku/docs/assets/cadoku-bda12f260fd53d56.js.br",
     "cadoku/docs/assets/favicon-1850237cac6c2879.ico",
